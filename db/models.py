@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import ARRAY, Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, Text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 
@@ -30,3 +31,19 @@ class ReviewRaw(Base):
     reviewer_name = Column(Text)
     has_owner_response = Column(Boolean, default=False)
     scraped_at = Column(DateTime, server_default=func.now())
+
+
+class ReviewProcessed(Base):
+    __tablename__ = "reviews_processed"
+
+    id = Column(Integer, primary_key=True)
+    review_id = Column(Integer, ForeignKey("reviews_raw.id"))
+    sentiment_label = Column(Text)
+    sentiment_score = Column(Float)
+    topic_id = Column(Integer)
+    topic_label = Column(Text)
+    complaints = Column(ARRAY(Text))
+    entities = Column(ARRAY(Text))
+    is_suspicious = Column(Boolean, default=False)
+    embedding = Column(Vector(384))
+    processed_at = Column(DateTime, server_default=func.now())
