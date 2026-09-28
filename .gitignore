@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+.ipynb_checkpoints/
+models/
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+.CLAUDE/scheduled_tasks.lock
