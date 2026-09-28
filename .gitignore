@@ -13,3 +13,4 @@ build/
 .CLAUDE/scheduled_tasks.lock
 data/scraped_businesses.csv
 data/scraped_reviews.csv
+scraper/auth_state.json

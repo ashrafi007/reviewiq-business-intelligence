@@ -12,6 +12,7 @@ Selectors below were captured from a live Google Maps listing page
 (2026-09-28) and may need updating if Google changes their markup.
 """
 
+import os
 import random
 import re
 import time
@@ -32,6 +33,8 @@ SCRAPER_SETTINGS = {
     "viewport": {"width": 1280, "height": 800},
     "locale": "en-US",
 }
+
+AUTH_STATE_PATH = os.path.join(os.path.dirname(__file__), "auth_state.json")
 
 REVIEW_CARD_SELECTOR = "div.jftiEf.fontBodyMedium"
 REVIEWER_NAME_SELECTOR = ".al6Kxe"
@@ -319,6 +322,13 @@ def run(restaurants=None, max_businesses=20):
     restaurants = restaurants[:max_businesses]
     session = get_session()
 
+    has_auth = os.path.exists(AUTH_STATE_PATH)
+    if has_auth:
+        print(f"Using saved Google session from {AUTH_STATE_PATH}")
+    else:
+        print("No saved Google session found - scraping anonymously (run "
+              "`python -m scraper.save_google_session` to log in and avoid this).")
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=SCRAPER_SETTINGS["headless"],
@@ -329,6 +339,7 @@ def run(restaurants=None, max_businesses=20):
             viewport=SCRAPER_SETTINGS["viewport"],
             locale=SCRAPER_SETTINGS["locale"],
             extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
+            storage_state=AUTH_STATE_PATH if has_auth else None,
         )
         page = context.new_page()
         Stealth().apply_stealth_sync(page)
