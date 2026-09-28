@@ -82,12 +82,15 @@ def build_search_url(name, address):
 
 
 def open_restaurant(page, name, address, retries=3):
+    """Navigate to the listing. Google renders a reduced tab bar (no Reviews
+    tab) for logged-out/anonymous sessions, so readiness is judged on the
+    name (h1) and rating badge, not the Reviews tab itself."""
     url = build_search_url(name, address)
     for attempt in range(retries + 1):
         page.goto(url, wait_until="domcontentloaded")
         try:
             page.wait_for_selector("h1", timeout=20000)
-            page.get_by_text("Reviews", exact=True).first.wait_for(timeout=20000)
+            page.wait_for_selector(OVERALL_RATING_SELECTOR, timeout=20000)
             return
         except Exception:
             if attempt == retries:
@@ -120,14 +123,20 @@ def safe_click(page, locator, attempts=4, click_timeout=4000):
 
 
 def click_reviews_tab(page):
-    safe_click(page, page.get_by_text("Reviews", exact=True).first)
-    page.wait_for_timeout(1500)
+    """Click the star-rating badge, which reliably reveals/opens the Reviews
+    tab even for logged-out sessions where the tab isn't pre-rendered."""
+    try:
+        safe_click(page, page.get_by_text("Reviews", exact=True).first, attempts=1, click_timeout=3000)
+    except Exception:
+        safe_click(page, page.locator(TOTAL_REVIEWS_SELECTOR).first)
+    page.wait_for_timeout(2500)
+    page.wait_for_selector(REVIEW_CARD_SELECTOR, timeout=15000)
 
 
 def sort_by_newest(page):
     sort_button = page.get_by_role("button", name=re.compile("Sort", re.I))
     for _ in range(3):
-        safe_click(page, sort_button)
+        safe_click(page, sort_button, attempts=4, click_timeout=6000)
         page.wait_for_timeout(500)
         try:
             safe_click(page, page.get_by_text("Newest", exact=True).first, attempts=1, click_timeout=3000)
@@ -326,10 +335,14 @@ def run(restaurants=None, max_businesses=20):
 
         total_inserted = 0
         for entry in restaurants:
-            try:
-                total_inserted += scrape_restaurant(page, entry, session)
-            except Exception as e:
-                print(f"  !! Failed to scrape {entry['name']}: {e}")
+            for attempt in range(2):
+                try:
+                    total_inserted += scrape_restaurant(page, entry, session)
+                    break
+                except Exception as e:
+                    print(f"  !! Failed to scrape {entry['name']} (attempt {attempt + 1}): {e}")
+                    if attempt == 0:
+                        time.sleep(3)
             time.sleep(random.uniform(3, 6))
 
         browser.close()
