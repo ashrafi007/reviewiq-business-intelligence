@@ -4,7 +4,15 @@ __pycache__/
 .env
 *.egg-info/
 .ipynb_checkpoints/
-models/
+# Ephemeral scratch caches (safe-resume-after-DB-failure files), not final
+# artifacts - these get deleted on a successful run anyway.
+models/embeddings.npy
+models/embedding_review_ids.json
+models/topic_assignments.json
+# models/topic_model/ and ml/models/*.pkl ARE committed - small (~1MB total),
+# self-contained production artifacts the weekly cron depends on to do
+# incremental work (assign new reviews to existing topics, score new reviews
+# for is_suspicious) without needing to refit from scratch in CI.
 node_modules/
 dist/
 build/
