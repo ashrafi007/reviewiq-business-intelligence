@@ -1,11 +1,19 @@
-name: Weekly Review Scraper
+name: Weekly Pipeline
 on:
   schedule:
     - cron: '0 0 * * 0'   # Every Sunday midnight UTC
   workflow_dispatch:
 jobs:
-  scrape:
+  pipeline:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # BERTopic's fit/transform step has a known numba/joblib deadlock risk
+      # above 1 thread - see .CLAUDE/nlp_progress.md.
+      OMP_NUM_THREADS: 1
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      NUMBA_NUM_THREADS: 1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -13,13 +21,34 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt
       - run: playwright install chromium --with-deps
-      - name: Run scraper
+
+      - name: Restore Google auth state
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GOOGLE_AUTH_STATE: ${{ secrets.GOOGLE_AUTH_STATE }}
+        run: |
+          if [ -n "$GOOGLE_AUTH_STATE" ]; then
+            echo "$GOOGLE_AUTH_STATE" > scraper/auth_state.json
+            echo "Restored saved Google session."
+          else
+            echo "No GOOGLE_AUTH_STATE secret set - scraping anonymously (may be throttled)."
+          fi
+
+      - name: Scrape new reviews
         run: python -m scraper.google_maps_scraper
+
+      - name: Sentiment analysis
+        run: python -m nlp.sentiment
+      - name: Assign topics to new reviews
+        run: python -m nlp.topic_model --incremental
+      - name: Extract complaints and entities
+        run: python -m nlp.complaint_extractor
+      - name: Compute embeddings
+        run: python -m nlp.embeddings
+
+      - name: Score fake-review flags and refit rating forecasts
+        run: python -m ml.run_models
+
       - name: Export to CSV
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m db.export_to_csv
       - uses: actions/upload-artifact@v4
         with:
