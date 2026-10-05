@@ -6,6 +6,16 @@ _Last updated: 2026-10-05_
 
 `.github/workflows/scrape.yml` runs on a Sunday-midnight-UTC cron (+ manual `workflow_dispatch`), chaining the full pipeline: scrape → sentiment → incremental topic assignment → complaints → embeddings → fake-review scoring + forecast refit → CSV export.
 
+### The workflow had already fired once for real (2026-10-04) before this was checked - and it quietly did nothing
+
+GitHub Actions' cron trigger uses whatever's on `main` at trigger time, so the Sunday schedule ran this pipeline before anyone verified it. `gh run view` showed it as a green "success" - but reading the actual job log (`gh run view --job=<id> --log`) told a different story: **all 20 attempted businesses failed to scrape** (`Page.wait_for_selector: Timeout 15000ms exceeded`, consistent with anonymous-session throttling since `GOOGLE_AUTH_STATE` wasn't set yet), ending in `Done. 0 new reviews inserted.` - and the job still exited 0, because nothing downstream raised on zero new data. This is the exact kind of silent failure an unattended weekly cron is most dangerous for: it would keep reporting "success" indefinitely while doing nothing, with no reason for anyone to go check.
+
+Two bugs found this way, both fixed (see commit for full detail):
+1. **`max_businesses=20` default, no rotation in `get_ready_entries()`** - even with auth working, the cron would have scraped the same first 20 of 50 restaurants every single week, forever. Added a CLI override; the workflow now passes `50` explicitly.
+2. **Total scrape failure reported as CI success.** `run()` now exits non-zero when literally every business fails every attempt - a strong, specific signal (vs. a legitimately quiet week with nothing new posted) that surfaces as a failed run instead of a silently-green one.
+
+**Lesson applied:** always read what a "successful" unattended job's logs actually say before trusting the green checkmark, especially the first time it runs for real.
+
 This was built on top of earlier work already in the repo (`scraper/save_google_session.py`, `scraper/scheduler.py`, and a scrape-only version of this workflow) rather than from scratch — the scraping half already existed and worked; what was missing was wiring in the rest of the pipeline and making it safe to run unattended.
 
 ### Problems found and fixed while building this
