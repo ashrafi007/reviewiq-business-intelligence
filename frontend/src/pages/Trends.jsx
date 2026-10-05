@@ -112,9 +112,9 @@ export default function Trends() {
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5">
         <h2 className="mb-3 text-sm font-semibold text-slate-700">Review Volume by Day of Week</h2>
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
           {day_of_week.map((d) => (
             <div key={d.day} className="text-center">
               <div
