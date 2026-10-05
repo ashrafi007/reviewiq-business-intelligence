@@ -345,22 +345,48 @@ def run(restaurants=None, max_businesses=20):
         Stealth().apply_stealth_sync(page)
 
         total_inserted = 0
+        failed_businesses = []
         for entry in restaurants:
+            succeeded = False
             for attempt in range(2):
                 try:
                     total_inserted += scrape_restaurant(page, entry, session)
+                    succeeded = True
                     break
                 except Exception as e:
                     print(f"  !! Failed to scrape {entry['name']} (attempt {attempt + 1}): {e}")
                     if attempt == 0:
                         time.sleep(3)
+            if not succeeded:
+                failed_businesses.append(entry["name"])
             time.sleep(random.uniform(3, 6))
 
         browser.close()
 
     session.close()
     print(f"Done. {total_inserted} new reviews inserted.")
+    if failed_businesses:
+        print(f"{len(failed_businesses)}/{len(restaurants)} businesses failed every attempt: {failed_businesses}")
+    # Every single business failing (as opposed to some failing, or all
+    # succeeding with genuinely nothing new to insert) is a strong signal
+    # something structural is wrong - e.g. anonymous-session throttling, a
+    # Google Maps DOM change - not just an unlucky week. Exit non-zero so
+    # this surfaces as a failed CI run instead of a quietly-green one that
+    # actually did nothing (found exactly this way: a real cron run scraped
+    # 0/20 attempted businesses and still reported success).
+    if restaurants and len(failed_businesses) == len(restaurants):
+        raise SystemExit(
+            f"All {len(restaurants)} businesses failed to scrape - treating this as a hard failure, "
+            "not a quiet no-op. Check auth_state.json / GOOGLE_AUTH_STATE and Google Maps page structure."
+        )
 
 
 if __name__ == "__main__":
-    run()
+    import sys
+
+    # Positional override for max_businesses (default 20 is a conservative
+    # cap for manual/local runs - the weekly cron passes the full count so
+    # every restaurant actually gets covered, not just the same first 20
+    # every single week; get_ready_entries() has no rotation).
+    max_businesses = int(sys.argv[1]) if len(sys.argv) > 1 else 20
+    run(max_businesses=max_businesses)

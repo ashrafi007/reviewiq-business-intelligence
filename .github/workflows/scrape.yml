@@ -34,7 +34,10 @@ jobs:
           fi
 
       - name: Scrape new reviews
-        run: python -m scraper.google_maps_scraper
+        # Default max_businesses (20) is a conservative cap for manual/local
+        # runs; restaurant_urls.py has no rotation, so without this override
+        # the cron would scrape the same first 20 of 50 restaurants forever.
+        run: python -m scraper.google_maps_scraper 50
 
       - name: Sentiment analysis
         run: python -m nlp.sentiment
