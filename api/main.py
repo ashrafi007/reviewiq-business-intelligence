@@ -33,6 +33,11 @@ class ChatRequest(BaseModel):
     business_id: int
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/api/businesses")
 def list_businesses():
     session = get_session()

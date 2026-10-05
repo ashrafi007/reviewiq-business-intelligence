@@ -1,0 +1,20 @@
+# Slim requirements for the deployed FastAPI service (Render) - api/, rag/,
+# and db/ only. The full requirements.txt (scraper, NLP, ML) is for local
+# dev and the GitHub Actions pipeline; the API never imports any of that at
+# request time (is_suspicious/forecasts/topic_labels are precomputed and
+# just read from Postgres - see api/queries.py) so installing
+# playwright/spacy/bertopic/xgboost/prophet here would be pure dead weight.
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+pgvector
+python-dotenv
+groq
+# Pinned to match requirements.txt exactly - these versions are a known-
+# compatible set (unpinned sentence-transformers/transformers resolve to
+# versions requiring torch>=2.5, which breaks against torch==2.2.2).
+numpy<2
+transformers==4.46.3
+sentence-transformers==3.3.1
+torch==2.2.2
