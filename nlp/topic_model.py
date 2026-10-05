@@ -102,6 +102,70 @@ def write_assignments(payload):
     return write_batches(upsert_topics, payload)
 
 
+def fetch_new_reviews(session):
+    """Reviews that don't have a topic assignment yet - used for the weekly
+    incremental run, as opposed to fetch_reviews() which pulls everything
+    for a full refit."""
+    rows = session.execute(
+        text(
+            """
+            SELECT r.id, r.review_text
+            FROM reviews_raw r
+            LEFT JOIN reviews_processed rp ON rp.review_id = r.id
+            WHERE rp.topic_label IS NULL
+            ORDER BY r.id
+            """
+        )
+    ).fetchall()
+    return rows
+
+
+def assign_new_reviews():
+    """Incremental path for the weekly cron: assigns NEW reviews to the
+    EXISTING fitted topic model via transform(), instead of refitting
+    BERTopic on the whole corpus. A full refit can renumber topic_ids
+    (BERTopic doesn't guarantee stable ids across fits), which would
+    silently break the topic_labels display-name mapping - transform()
+    only ever assigns reviews to topics that already exist, so topic_id
+    meanings never change underneath the dashboard.
+
+    New topics are never discovered this way - run() falls back to a full
+    compute_and_cache() if no fitted model is saved yet, but once one
+    exists, growing into new topics requires deliberately re-running that
+    full refit (and then nlp/topic_labels.py) by hand.
+    """
+    session = get_session()
+    rows = fetch_new_reviews(session)
+    if not rows:
+        session.close()
+        print("No new reviews to assign topics to.")
+        return
+
+    print(f"Loading fitted topic model from {MODEL_DIR}...")
+    topic_model = BERTopic.load(MODEL_DIR)
+
+    print(f"Assigning topics to {len(rows)} new reviews...")
+    embedder = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    texts = [r.review_text or "" for r in rows]
+    embeddings = embedder.encode(texts, show_progress_bar=True, batch_size=128)
+    topics, _ = topic_model.transform(texts, embeddings=embeddings)
+
+    label_cache = {}
+
+    def get_label(tid):
+        if tid not in label_cache:
+            label_cache[tid] = topic_label(topic_model, tid)
+        return label_cache[tid]
+
+    payload = [
+        {"review_id": r.id, "topic_id": int(tid), "topic_label": get_label(int(tid))}
+        for r, tid in zip(rows, topics)
+    ]
+    write_batches(upsert_topics, payload)
+    session.close()
+    print(f"Assigned topics to {len(payload)} new reviews.")
+
+
 def compute_and_cache():
     """Run the expensive part (encode, cluster, reduce outliers) once, then
     save the model and the resulting assignments to disk before touching the
@@ -187,5 +251,22 @@ def run():
     print("Topic modeling complete.")
 
 
+def run_incremental():
+    """Entry point for the weekly cron. Uses the committed, already-fitted
+    model to assign only new reviews - see assign_new_reviews() docstring
+    for why this doesn't just call run() (full refit) every week.
+    """
+    if os.path.exists(MODEL_DIR):
+        assign_new_reviews()
+    else:
+        print(f"No fitted model found at {MODEL_DIR} - running a full fit instead (first run).")
+        run()
+
+
 if __name__ == "__main__":
-    run()
+    import sys
+
+    if "--incremental" in sys.argv:
+        run_incremental()
+    else:
+        run()
