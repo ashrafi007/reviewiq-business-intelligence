@@ -3,7 +3,7 @@
 Restaurant review intelligence platform for 50 NYC restaurants (~12,000 Google Maps reviews): sentiment analysis, unsupervised topic modeling, complaint/entity extraction, a fake-review detector, a rating forecast, and a RAG chatbot grounded in the actual reviews — all surfaced through a React dashboard.
 
 **Live:**
-- Dashboard: https://frontend-amber-three-74.vercel.app
+- Dashboard: https://reviewiq-psi.vercel.app
 - API: https://reviewiq-api-shoc.onrender.com ([docs](https://reviewiq-api-shoc.onrender.com/docs))
 
 > Backend is on Render's free tier and sleeps after 15 min idle — the first request after a while takes 30-60s to wake up.
