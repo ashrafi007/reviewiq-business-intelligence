@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from api import queries
 from db.session import get_session
 from rag.chatbot import ask as rag_ask
+from rag.chatbot import get_embedder
 
 app = FastAPI(title="ReviewIQ API")
 
@@ -26,6 +27,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def preload_embedder():
+    # rag.chatbot.get_embedder() lazily downloads+loads all-MiniLM-L6-v2
+    # (~90MB) on first use and caches it in a module-level global. Without
+    # this, whoever sends the first /api/chat request after any server
+    # restart (including Render's free-tier cold start) eats that ~15-20s
+    # load time themselves. Loading it here moves that cost into the
+    # server's own startup instead, before any real request arrives.
+    get_embedder()
 
 
 class ChatRequest(BaseModel):
